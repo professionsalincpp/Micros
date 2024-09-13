@@ -1,0 +1,113 @@
+#ifndef __OS_H
+#define __OS_H
+
+#include "headers/types.h"
+#include "src/types.cpp"
+#include "src/stream.cpp"
+#include "headers/stream.h"
+#include "src/emulator.cpp"
+#include "headers/emulator.h"
+#include "utils/stringutils.hpp"
+#include "utils/configutils.h"
+#include "utils/convertutils.hpp"
+#include "utils/funcutils.hpp"
+#include "utils/memutils.hpp"
+
+#ifndef SERIALTYPE
+
+#define SERIALTYPE HardwareSerial
+
+#endif
+
+extern Emulator emulator;
+extern OStream<SERIALTYPE> stream;
+static bool __initialized = false;
+static storage::OMainStorage* __storageInstance[1];
+
+void update();
+void initialize();
+storage::OMainStorage initStorage() {
+    if (!__configured) {
+        config();
+        __configured = true;
+    }
+    storage::OMainStorage __mainStorage = storage::OMainStorage();
+    __storageInstance[0] = &__mainStorage;
+    return __mainStorage;
+}
+
+storage::OMainStorage getStorage() {
+    return initStorage();
+}
+
+// Emulator& initEmulator(uint8_t id, EAccess access) {
+//     if (!__configured) {
+//         config();
+//         __configured = true;
+//     }
+//     emulator = Emulator(id, access);
+//     emulator.resize(__clasters_size_float, __clasters_size_int, __clasters_size_string);
+//     return emulator;
+// }
+
+// Emulator &getEmulator(uint8_t id, EAccess access=PROTECTEDACCESS) {
+//     return initEmulator(id, access);
+// }
+
+template<typename T>
+void processError(int status, OStream<T> &stream) {
+    switch (status) {
+        case ECommonTaskProcessError::ErrorNone:
+            stream.print("OK\n");
+            break;
+        case ECommonTaskProcessError::AccessDenied:
+            stream.print("Access Denied\n");
+            break;
+        case ECommonTaskProcessError::InvalidArgument:
+            stream.print("Invalid Argument\n");
+            break;
+        case ECommonTaskProcessError::ReceiveError:
+            stream.print("Receive Error\n");
+            stream.flush();
+            stream.clear();
+            break;
+        case ECommonTaskProcessError::ReceiveInvalidPackage:
+            stream.print("Receive Invalid Package\n");
+            break;
+        case ECommonTaskProcessError::TaskProcessError:
+            stream.print("Task Process Error\n");
+            break;
+        case ECommonTaskProcessError::NoTasksAvailable:
+            stream.print("No Tasks Available\n");
+            break;
+        default:
+            stream.print("Unknown Error With Code: "); stream.println(status);
+            break;
+    }
+}
+
+void setup() {
+    Serial.begin(9600);
+    if (!__configured) {
+        config();
+        __configured = true; 
+    }
+    initialize();
+    __initialized = true;
+}
+
+void loop() {
+    update();
+    if (__initialized) {
+        if (emulator.isTasksAvailable(stream)) {
+            int status = emulator.processCommonTasks(stream);
+            processError(status, stream);
+        }
+        stream.flush();
+    }
+    if (millis() % 10 == 0) {
+        stream.clear();
+    }
+}
+
+#endif //__OS_H
